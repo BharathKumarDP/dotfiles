@@ -9,11 +9,13 @@ for file in ~/.{path,bash_prompt,exports,aliases,functions,extra}; do
 done;
 unset file;
 
-
+#aliases
 alias winhome="cd /mnt/c/users/ELCOT";
 alias edu="cd /mnt/d";
+alias 'ls-detail'="ls -C -c -lt --color -s --size";
+alias reload-bash="source ~/.bash_profile";
 
-# My function to compile C and C++ easily
+# Function to compile C and C++ easily
 function compile() {
 
 	for file in $@; do      #looping through all the files passed in as arguments
@@ -31,6 +33,74 @@ function compile() {
 				;;
 		esac
 	done
+
+}
+
+# compiles all the dependancies (i.e., all the c and cpp files associated with the local header files included)
+function comdep() {
+    regex="^\"(.*)\"$";
+    for file in $@; do
+        local extension=${file#*.};
+        
+        if [[ $extension == "c" ]]; then
+            local compiler="gcc";
+        elif [[ $extension == "cpp" ]]; then
+            local compiler="g++";
+        else
+            echo "Invalid File";
+            return;
+        fi
+        
+        local executable=${file%.*};
+        local i=0;
+        local temp=( $(grep "#include \"*\"" $file | cut -f2 -d " ") );
+        for line in ${temp[@]}; do
+            [[ $line =~ $regex ]] && headers=${BASH_REMATCH[1]};
+            
+            if [[ ${headers#*.} == "h" ]]; then
+                local dep_file=${headers%.*}"."${extension};
+                local temp="^${dep_file}$"
+                if [[ ${dependancies[*]} =~ ${dep_file} ]]; then
+                    continue;
+                fi
+                local dependancies[$i]=$dep_file;
+                (( i++ ));
+            fi
+        
+        done
+        $compiler -O3 ${dependancies[@]} $file -o ${executable};
+    done
+}
+
+# Creates classes for C++ files (Both header as well as cpp files)
+function class() {
+    if [[ $# -eq 0 ]]; then
+        echo "Class Name Required";
+        return;
+    fi
+
+    for class_name in $@; do
+        local header="${class_name}.h"
+        local source="${class_name}.cpp"
+
+        if [[ -e $header || -e $source ]]; then
+            read -p "$header or $source already exists. Do You wanna replace them? [Y/N]" permisson;
+        fi
+
+        if [[ $permisson == "n" || $permisson == "N" ]]; then
+            unset permisson;
+            continue;
+        fi
+
+        cp ~/class.h $header;
+        cp ~/class.cpp $source;
+
+        sed -i "s/x/${class_name}/g" $header;
+        sed -i "s/x/${class_name}/g" $source;
+
+    
+    done
+
 
 }
 
@@ -56,7 +126,7 @@ function run() {
 # SYNTAX : out [-v or -c] [C or CPP file]
 # The order of the arguments doesn't matter and [-v or -c] is optional
 # -v stands for open the created file in vim editor
-# -c stands for open the creadted file in vscode (If it is installed)
+# -c stands for open the created file in vscode (If it is installed)
 # You can provide any number of files
 
 function out() {
@@ -81,6 +151,14 @@ function out() {
                 local files[$i]=$temp;
                 (( i++ ));
                 ;;
+            *.py)
+                local files[$i]=$temp;
+                (( i++ ));
+                ;;
+            *.java)
+                local files[$i]=$temp;
+                (( i++ ));
+                ;;
             *)
                 echo "Invalid Argument";
                 return;
@@ -94,6 +172,7 @@ function out() {
     fi
 
     for file in ${files[@]}; do
+        local class=${file%.*};     #Only for java files
         local extension=${file#*.};
         local source="outline."$extension;
         if [ -e $file ]; then
@@ -105,6 +184,13 @@ function out() {
             fi
         fi
         touch $file;
+
+        # For java files we need to change the class name
+        if [ $extension == "java" ]; then
+            sed -i "s/class .*/class ${class} {/" ~/$source;
+        fi
+
+
         cp ~/$source $file;
 
         if [ ! -z ${flag+x} ]; then
@@ -118,6 +204,48 @@ function out() {
         fi
     done
 
+}
+#Function to create Directory and enter the directory
+#Combining mkdir+cd commands
+#Inspired from Missing Semester classes MIT
+#SYNTAX: mcd dir_name
+function mcd(){
+        if [ $# -eq 0 ]; then
+                echo "Too few arguments";
+                return;
+        fi
+        #declare -a list;
+        #readarray list < <(find -name "$1" -type d);
+        if [ -d $1 ];then
+                echo "Directory name already exists";
+                read -p "Do you want to Open the existing directory[Y/N] ?:" ans;
+                if [ $ans == "Y" -o $ans == "y" ]; then
+                        cd "$1";
+                        return;
+                fi
+                if [ $ans ==  "N" -o $ans == "n" ]; then
+                        return;
+                fi
+        fi
+        mkdir "$1";
+        echo "Directory created";
+        cd "$1";
+}
+#Function to access tldr help pages
+#Just to make tldr command more self-explanative and intuitive
+#
+function Help(){
+         if [ $# -eq 0 ]; then
+                echo "Too few arguments";
+                return;
+        fi
+        if [ $# -gt 1 ]; then
+                echo "Too many arguments";
+                echo "Give one command at a time";
+                return;
+        fi
+        echo -e "\n------------ "$1"--------------\n";
+        tldr "$1";
 }
 
 # Case-insensitive globbing (used in pathname expansion)
